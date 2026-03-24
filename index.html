@@ -264,6 +264,67 @@
             font-size: 14px;
             font-weight: 500;
         }
+
+        /* 이번 주 급식 테이블 */
+        .week-lunch-wrapper {
+            background-color: #ffffff;
+            border-radius: 24px;
+            padding: 28px 32px;
+            width: 100%;
+            max-width: 1050px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.02);
+            box-sizing: border-box;
+            overflow-x: auto;
+        }
+        .week-lunch-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 10px;
+            min-width: 600px;
+        }
+        .week-lunch-table th {
+            background-color: #6c3ce9;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 10px 8px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .week-lunch-table th.today-col {
+            background-color: #de3163;
+            box-shadow: 0 4px 12px rgba(222,49,99,0.3);
+        }
+        .week-lunch-table td {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            vertical-align: top;
+            padding: 12px 10px;
+            font-size: 13px;
+            color: #334155;
+            line-height: 1.8;
+        }
+        .week-lunch-table td.today-col {
+            background-color: #fff5f7;
+            border: 2px solid #de3163;
+        }
+        .week-lunch-table td.empty-col {
+            color: #cbd5e0;
+            text-align: center;
+            font-size: 13px;
+        }
+        .week-kcal {
+            display: block;
+            font-size: 11px;
+            color: #92400e;
+            background: #fef3c7;
+            border-radius: 6px;
+            padding: 2px 6px;
+            margin-bottom: 6px;
+            font-weight: 700;
+            width: fit-content;
+        }
     </style>
 </head>
 <body>
@@ -358,6 +419,17 @@
             <span class="lunch-kcal" id="lunchKcal" style="display:none;"></span>
         </div>
         <div class="lunch-items" id="lunchItems">
+            <span class="lunch-loading">급식 정보를 불러오는 중...</span>
+        </div>
+    </div>
+
+    <div class="header-title" style="margin-top: 40px;">
+        <span>📅</span>
+        <h1>이번 주 급식</h1>
+    </div>
+
+    <div class="week-lunch-wrapper">
+        <div id="weekLunchContent">
             <span class="lunch-loading">급식 정보를 불러오는 중...</span>
         </div>
     </div>
@@ -509,17 +581,96 @@
 
                 if (items.length === 0) {
                     itemsEl.innerHTML = '<span class="lunch-empty">메뉴 정보를 파싱할 수 없습니다.</span>';
-                    return;
+                } else {
+                    itemsEl.innerHTML = items
+                        .map(item => `<span class="lunch-item">${item}</span>`)
+                        .join('');
                 }
 
-                itemsEl.innerHTML = items
-                    .map(item => `<span class="lunch-item">${item}</span>`)
-                    .join('');
+                // 이번 주 급식 테이블 렌더링
+                renderWeekLunch(doc, todayStr);
 
             } catch (e) {
                 document.getElementById('lunchItems').innerHTML =
                     `<span class="lunch-error">급식 정보를 불러오지 못했습니다. (${e.message})</span>`;
+                document.getElementById('weekLunchContent').innerHTML =
+                    `<span class="lunch-error">급식 정보를 불러오지 못했습니다. (${e.message})</span>`;
             }
+        }
+
+        function extractMenuFromTd(td) {
+            if (!td) return { kcal: '', items: [] };
+            const kcalP = td.querySelector("p.fm_tit_p");
+            const kcal = kcalP ? (kcalP.textContent.match(/([\d.]+)\s*Kcal/i) || [])[1] || '' : '';
+            const menuP = td.querySelector('p[class=""]') ||
+                          Array.from(td.querySelectorAll("p")).find(p =>
+                              !p.classList.contains("fm_tit_p") && !p.classList.contains("btn_style1")
+                          );
+            const items = menuP
+                ? menuP.innerHTML
+                    .split(/<br\s*\/?>/i)
+                    .map(s => cleanMenuItem(s.replace(/<[^>]+>/g, '').trim()))
+                    .filter(s => s.length > 0)
+                : [];
+            return { kcal, items };
+        }
+
+        function renderWeekLunch(doc, todayStr) {
+            const weekEl = document.getElementById('weekLunchContent');
+
+            const headerRow = doc.querySelector("thead tr");
+            if (!headerRow) { weekEl.innerHTML = '<span class="lunch-empty">주간 급식 정보 없음</span>'; return; }
+
+            const headerThs = headerRow.querySelectorAll("th");
+            const lunchRow = Array.from(doc.querySelectorAll("tbody tr")).find(tr => {
+                const th = tr.querySelector("th");
+                return th && th.textContent.trim() === "중식";
+            });
+            if (!lunchRow) { weekEl.innerHTML = '<span class="lunch-empty">중식 정보 없음</span>'; return; }
+
+            const tds = lunchRow.querySelectorAll("td");
+
+            // 월~금만 추출 (일·토 제외, 데이터 있는 열만)
+            const days = [];
+            for (let i = 1; i < headerThs.length; i++) {
+                const label = headerThs[i].textContent.trim(); // "수 2026-03-25"
+                const dayMatch = label.match(/^([일월화수목금토])/);
+                if (!dayMatch) continue;
+                const dayName = dayMatch[1];
+                if (dayName === '일' || dayName === '토') continue;
+                const td = tds[i - 1];
+                const isToday = label.includes(todayStr);
+                days.push({ label, dayName, td, isToday });
+            }
+
+            if (days.length === 0) {
+                weekEl.innerHTML = '<span class="lunch-empty">이번 주 급식 정보가 없습니다.</span>';
+                return;
+            }
+
+            let headerHtml = '<tr>';
+            days.forEach(d => {
+                const dateOnly = (d.label.match(/\d{4}-\d{2}-\d{2}/) || [''])[0];
+                const mmdd = dateOnly ? dateOnly.slice(5) : '';
+                headerHtml += `<th class="${d.isToday ? 'today-col' : ''}">${d.dayName} <span style="font-weight:400;font-size:12px;">${mmdd}</span></th>`;
+            });
+            headerHtml += '</tr>';
+
+            let bodyHtml = '<tr>';
+            days.forEach(d => {
+                const { kcal, items } = extractMenuFromTd(d.td);
+                if (items.length === 0) {
+                    bodyHtml += `<td class="empty-col ${d.isToday ? 'today-col' : ''}">―</td>`;
+                } else {
+                    bodyHtml += `<td class="${d.isToday ? 'today-col' : ''}">`;
+                    if (kcal) bodyHtml += `<span class="week-kcal">🔥 ${kcal} Kcal</span>`;
+                    bodyHtml += items.map(item => `${item}<br>`).join('');
+                    bodyHtml += `</td>`;
+                }
+            });
+            bodyHtml += '</tr>';
+
+            weekEl.innerHTML = `<table class="week-lunch-table"><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
         }
     </script>
 </body>
