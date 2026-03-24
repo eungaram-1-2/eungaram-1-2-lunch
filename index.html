@@ -516,6 +516,9 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
 
+                // 이번 주 급식 테이블은 항상 렌더링
+                renderWeekLunch(doc, todayStr);
+
                 const itemsEl = document.getElementById('lunchItems');
 
                 // thead에서 오늘 날짜가 있는 열 인덱스 찾기
@@ -586,9 +589,6 @@
                         .map(item => `<span class="lunch-item">${item}</span>`)
                         .join('');
                 }
-
-                // 이번 주 급식 테이블 렌더링
-                renderWeekLunch(doc, todayStr);
 
             } catch (e) {
                 document.getElementById('lunchItems').innerHTML =
