@@ -452,7 +452,7 @@
                 if (headerRow) {
                     const ths = headerRow.querySelectorAll("th");
                     for (let i = 0; i < ths.length; i++) {
-                        if (ths[i].textContent.trim() === todayStr) {
+                        if (ths[i].textContent.includes(todayStr)) {
                             colIndex = i;
                             break;
                         }
